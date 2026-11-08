@@ -88,6 +88,66 @@ echo "== inspect reports AI tells =="
 R=$(curl -s -X POST "$BASE/api/inspect" -H 'Content-Type: application/json' --data-binary "$AI_BODY")
 echo "$R" | grep -q '"suspicious": *true'; check "inspect AI tells -> suspicious" $?
 
+echo "== deep scrub: residual invisibles (bidi/tag/private/noncharacter) =="
+DEEP='{"text":"a\u202eb\u061cc\u200fd\ue000e\ufffef\u0640g\u200bh"}'
+R=$(curl -s -X POST "$BASE/api/clean" -H 'Content-Type: application/json' --data-binary "$DEEP")
+if echo "$R" | python3 -c '
+import sys,json
+d=json.load(sys.stdin); c=d["cleaned"]; r=d["report"]
+bad=[hex(ord(ch)) for ch in c if ord(ch) in (0x202e,0x061c,0x200f,0xe000,0xfffe,0x0640,0x200b)]
+assert not bad, bad
+assert c=="abcdefgh", c
+assert r["verify"]["clean"] is True, r.get("verify")
+# Upstream already removes 4 of these 7; deep_scrub only sees what it leaves
+# behind (bidi marks + tatweel here), so 3 is the real clean-time count.
+assert r["deep_scrub"]["total"]>=3, r.get("deep_scrub")
+'; then ok "deep scrub removes bidi/tag/private/noncharacter + verify clean"; else bad "deep scrub removes bidi/tag/private/noncharacter + verify clean"; fi
+
+echo "== deep scrub keeps load-bearing glue (ZWJ/ZWNJ) =="
+GLUE='{"text":"\u0915\u094d\u200d\u0937"}'
+R=$(curl -s -X POST "$BASE/api/clean" -H 'Content-Type: application/json' --data-binary "$GLUE")
+if echo "$R" | python3 -c '
+import sys,json
+d=json.load(sys.stdin); c=d["cleaned"]
+assert c=="\u0915\u094d\u200d\u0937", repr(c)
+'; then ok "Devanagari ZWJ survives (no space injected)"; else bad "Devanagari ZWJ survives (no space injected)"; fi
+
+echo "== deai_style level 1 rewrites stock phrases =="
+DEAI='{"text":"In order to utilize the tool \u2014 which is very useful \u2014 we delve into it.","options":{"deai_style":1}}'
+R=$(curl -s -X POST "$BASE/api/clean" -H 'Content-Type: application/json' --data-binary "$DEAI")
+if echo "$R" | python3 -c '
+import sys,json
+d=json.load(sys.stdin); c=d["cleaned"]
+assert "To use the tool, which is very useful, we explore it." == c, c
+'; then ok "deai_style=1 rewrites phrases and dashes"; else bad "deai_style=1 rewrites phrases and dashes"; fi
+
+echo "== deai_style=0 is a no-op =="
+R=$(curl -s -X POST "$BASE/api/clean" -H 'Content-Type: application/json' \
+  --data-binary '{"text":"in order to utilize","options":{"deai_style":0,"strip_ai_tells":false}}')
+if echo "$R" | python3 -c 'import sys,json; assert "in order to utilize"==json.load(sys.stdin)["cleaned"]'; then ok "deai_style=0 leaves phrasing"; else bad "deai_style=0 leaves phrasing"; fi
+
+echo "== deai_style level 2 drops intensifiers =="
+R=$(curl -s -X POST "$BASE/api/clean" -H 'Content-Type: application/json' \
+  --data-binary '{"text":"in order to utilize very good stuff","options":{"deai_style":2}}')
+if echo "$R" | python3 -c 'import sys,json; assert "to use good stuff"==json.load(sys.stdin)["cleaned"]'; then ok "deai_style=2 drops very"; else bad "deai_style=2 drops very"; fi
+
+echo "== numeric range and CLI flags untouched =="
+R=$(curl -s -X POST "$BASE/api/clean" -H 'Content-Type: application/json' \
+  --data-binary '{"text":"tahun 2019 \u2013 2020, jalankan --json sekarang","options":{"deai_style":1,"strip_ai_tells":false}}')
+if echo "$R" | python3 -c '
+import sys,json
+c=json.load(sys.stdin)["cleaned"]
+assert c=="tahun 2019 \u2013 2020, jalankan --json sekarang", c
+'; then ok "range + flag preserved"; else bad "range + flag preserved"; fi
+
+echo "== bad deai_style values never crash =="
+for V in '"banana"' 'null' '99' '-5' 'true' '2.7'; do
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/clean" \
+    -H 'Content-Type: application/json' \
+    --data-binary "{\"text\":\"in order to test\",\"options\":{\"deai_style\":$V}}")
+  [ "$CODE" = "200" ]; check "deai_style=$V -> 200" $?
+done
+
 echo "== js syntax =="
 if command -v node >/dev/null; then node --check "$APP/static/app.js"; check "node --check app.js" $?; fi
 

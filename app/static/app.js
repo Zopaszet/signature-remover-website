@@ -9,8 +9,10 @@
   // ---- constants -------------------------------------------------
   var OPTION_IDS = [
     'strip_ai_tells', 'nfkc', 'normalize_spaces', 'strip_emoji_glue',
-    'strip_bidi', 'aggressive_homoglyphs'
+    'strip_bidi', 'aggressive_homoglyphs', 'deep_scrub', 'verify'
   ];
+  // deai_style is numeric (0|1|2), sent separately from the boolean keys.
+  var DEAI_DEFAULT = 1;
   var MAX_BYTES = 25 * 1024 * 1024; // 25 MiB raw, per contract
 
   var KIND_LABELS = {
@@ -59,6 +61,8 @@
     els.inspectBtn = $('inspectBtn');
     els.resetBtn = $('resetBtn');
 
+    els.deaiSelect = $('opt-deai_style');
+
     els.status = $('statusRegion');
     els.empty = $('emptyState');
 
@@ -77,7 +81,9 @@
 
     els.resultText = $('resultText');
     els.textSummary = $('textSummary');
+    els.textDeaiNote = $('textDeaiNote');
     els.textStats = $('textStats');
+    els.textVerify = $('textVerify');
     els.cleanedText = $('cleanedText');
     els.textOutputMeta = $('textOutputMeta');
     els.textMarks = $('textMarks');
@@ -169,7 +175,24 @@
       var input = $('opt-' + id);
       opts[id] = !!(input && input.checked);
     });
+    opts.deai_style = readDeaiStyle();
     return opts;
+  }
+
+  // Numeric 0..2. Missing or unparsable falls back to 0 (Mati).
+  function readDeaiStyle() {
+    var sel = els.deaiSelect || $('opt-deai_style');
+    if (!sel) { return 0; }
+    var v = parseInt(String(sel.value), 10);
+    if (isNaN(v)) { return 0; }
+    if (v < 0) { return 0; }
+    if (v > 2) { return 2; }
+    return v;
+  }
+
+  function resetDeaiStyle() {
+    if (!els.deaiSelect) { return; }
+    els.deaiSelect.value = String(DEAI_DEFAULT);
   }
 
   // ---- health ----------------------------------------------------
@@ -458,6 +481,10 @@
     if (typeof reportBefore.layer_a_total === 'number' && reportBefore.layer_a_total > 0) {
       items.push(reportBefore.layer_a_total + ' karier teks tak terlihat pada isi dokumen.');
     }
+    var deep = reportBefore.deep_scrub;
+    if (deep && typeof deep.total === 'number' && deep.total > 0) {
+      items.push('Deep scrub: ' + deep.total + ' karakter tersembunyi sisa lapisan pertama.');
+    }
     if (Array.isArray(reportBefore.findings)) {
       reportBefore.findings.forEach(function (f) { items.push(String(f)); });
     }
@@ -498,9 +525,11 @@
     hide(els.empty);
     show(els.resultText);
 
+    var report = (data.report && typeof data.report === 'object') ? data.report : {};
+
     setText(els.textSummary, data.summary || 'Pembersihan selesai.');
 
-    var stats = (data.report && data.report.stats) || null;
+    var stats = report.stats || null;
     var before = stats ? stats.input_length : state.lastInputLength;
     var after = stats ? stats.output_length
       : (data.content_length != null ? data.content_length
@@ -514,6 +543,15 @@
     els.textStats.appendChild(statCard('Dihapus', removed.toLocaleString('id-ID'), { cls: 'accent', sub: 'karakter tak terlihat' }));
     els.textStats.appendChild(statCard('Diganti', replaced.toLocaleString('id-ID'), { cls: 'warn', sub: 'spasi / homoglyph' }));
 
+    var deep = report.deep_scrub;
+    if (deep && typeof deep.total === 'number' && deep.total > 0) {
+      els.textStats.appendChild(statCard('Lapisan 2', deep.total.toLocaleString('id-ID'),
+        { cls: 'accent', sub: 'karakter tersembunyi' }));
+    }
+
+    renderDeaiNote(report.deai_style);
+    renderVerify(report.verify);
+
     var cleaned = (data.cleaned != null) ? data.cleaned : '';
     setText(els.cleanedText, cleaned);
     setText(els.textOutputMeta, cleaned.length.toLocaleString('id-ID') + ' karakter');
@@ -524,6 +562,59 @@
     setText(els.textReportAfter, pretty(data.report));
 
     state.txtName = data.download_name || 'hasil.txt';
+  }
+
+  function renderDeaiNote(deai) {
+    var note = els.textDeaiNote;
+    if (!note) { return; }
+    note.textContent = '';
+    var total = (deai && typeof deai.total === 'number') ? deai.total : 0;
+    if (total <= 0) {
+      hide(note);
+      return;
+    }
+    note.appendChild(el('strong', null, total.toLocaleString('id-ID')));
+    note.appendChild(el('span', null, 'frasa dinetralkan'));
+    show(note);
+  }
+
+  function renderVerify(verify) {
+    var box = els.textVerify;
+    if (!box) { return; }
+    box.textContent = '';
+    box.classList.remove('is-pass', 'is-warn');
+
+    if (!verify || typeof verify !== 'object') {
+      hide(box);
+      return;
+    }
+
+    var clean = verify.clean === true;
+    box.classList.add(clean ? 'is-pass' : 'is-warn');
+
+    if (clean) {
+      box.appendChild(el('span', null, 'Terverifikasi bersih · 0 residu tak terlihat'));
+      show(box);
+      return;
+    }
+
+    var residual = (typeof verify.residual === 'number') ? verify.residual : 0;
+    box.appendChild(el('span', null,
+      'Sisa ' + residual.toLocaleString('id-ID') + ' karakter tak terlihat'));
+
+    var samples = Array.isArray(verify.samples) ? verify.samples : [];
+    if (samples.length > 0) {
+      var list = el('span', 'verify-samples');
+      samples.forEach(function (s) {
+        if (!s || !s.codepoint) { return; }
+        var label = String(s.codepoint);
+        if (typeof s.count === 'number') { label += ' ×' + s.count.toLocaleString('id-ID'); }
+        list.appendChild(el('span', 'verify-sample', label));
+      });
+      if (list.childNodes.length > 0) { box.appendChild(list); }
+    }
+
+    show(box);
   }
 
   // ---- file result ----------------------------------------------
@@ -709,6 +800,7 @@
   function resetAll() {
     els.textarea.value = '';
     updateCharCount();
+    resetDeaiStyle();
     state.file = null;
     updateFileChip();
     if (els.fileInput) { els.fileInput.value = ''; }

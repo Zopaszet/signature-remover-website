@@ -60,7 +60,10 @@ Repo relative to `WATERMARKS_REPO`.
   "strip_emoji_glue": false,
   "strip_bidi": false,
   "aggressive_homoglyphs": false,
-  "strip_ai_tells": true
+  "strip_ai_tells": true,
+  "deep_scrub": true,
+  "deai_style": 0,
+  "verify": true
 }
 ```
 
@@ -75,7 +78,13 @@ Option -> CLI flag mapping:
 | aggressive_homoglyphs | `--aggressive` | `--aggressive-homoglyphs` |
 
 `strip_ai_tells` has **no upstream CLI flag**: it is an app-side post-processing
-pass in `server.py` (see below).
+pass in `server.py` (see below). The same applies to `deep_scrub`, `deai_style`
+and `verify` — all four are app-side, not upstream flags.
+
+`deai_style` is an **integer** `0|1|2`, not a boolean. `0` = off, `1` =
+conservative phrasing only, `2` = also drop intensifiers/filler. Any other value
+(including a bool or a non-numeric string) must be coerced to `0` without
+raising.
 
 - Limits: raw input max **25 MiB** (for base64, decode first then check). Subprocess
   timeout 60s. Temp work dir via `tempfile.mkdtemp()`, always cleaned up.
@@ -139,6 +148,77 @@ Counts are returned as `report["ai_tells"]`:
 `{"dashes":int,"quotes":int,"emoji":int,"emoticons":int,"total":int}` — attached
 on `/api/clean` when `total > 0` (and `changed` becomes true), and always
 attached on `/api/inspect` for text.
+
+## App-side deep scrub (`deep_scrub`)
+
+Layer A deliberately preserves some invisible/format characters (they are
+"load-bearing" for emoji families, script joining, legitimate RTL). `deep_scrub`
+is a second deterministic pass that removes the rest, so the output can be
+proven to carry no hidden carrier at all.
+
+Removed groups (one key per group, plus `total`):
+
+| group | codepoints |
+|---|---|
+| `bidi` | U+061C, U+200E, U+200F, U+202A–U+202E, U+2066–U+2069 |
+| `tags` | U+E0001, U+E0020–U+E007F |
+| `invisible` | U+00AD, U+200B, U+2060–U+2064, U+FEFF, U+180E, U+034F, U+115F, U+1160, U+3164, U+FFA0, U+FFF9–U+FFFB |
+| `private` | U+E000–U+F8FF, U+F0000–U+FFFFD, U+100000–U+10FFFD |
+| `noncharacter` | U+FDD0–U+FDEF, any cp with `(cp & 0xFFFE) == 0xFFFE` |
+| `tatweel` | U+0640 |
+| `unassigned` | any `unicodedata.category(ch) == "Cn"` |
+
+U+200C (ZWNJ), U+200D (ZWJ), U+FE0E/U+FE0F (variation selectors) are **never**
+removed here — they are legitimate glue and are governed by the separate
+`strip_emoji_glue` / `strip_ai_tells` options.
+
+Shape: `{"bidi":int,"tags":int,"invisible":int,"private":int,"noncharacter":int,"tatweel":int,"unassigned":int,"total":int}`.
+Attached to `report` on `/api/clean` when `total > 0`, and to `report` on
+`/api/inspect` (detection counts on the original text, so `suspicious` is also
+true when `total > 0`).
+
+## App-side style normalisation (`deai_style`)
+
+Deterministic phrasing cleanup for the AI "house style". Runs **before**
+`strip_ai_tells`, so a clause dash becomes `", "` instead of being deleted into
+a bare space.
+
+- **Level 1** — phrase swaps (case-preserving, word-boundary):
+  `in order to`→`to`, `due to the fact that`→`because`,
+  `at this point in time`→`now`, `in the event that`→`if`,
+  `has/have the ability to`→`can`, `it is important to note that`→`note that`,
+  `it is worth noting that`→`note that`, `delve(s/d/ing) into`→`explore(d/s/ing)`,
+  `utilize(s/d/ing)`→`use(s/d/ing)`.
+  Also: em/en dash used as a clause break → `", "` (numeric ranges such as
+  `2019–2020` and `2019 – 2020` are left intact), and prose `--` → `", "`
+  (CLI flags such as `--json` are left intact).
+- **Level 2** — level 1 plus removal of standalone intensifiers
+  (`very`, `really`, `actually`, `basically`, `simply`, `quite`, `rather`,
+  `truly`, `essentially`, `literally`, `definitely`, `certainly`, `absolutely`,
+  `extremely`, `incredibly`, `honestly`, `frankly`) and duplicate words
+  (`the the` → `the`).
+
+Shape: `{"phrases":int,"dashes":int,"fillers":int,"total":int}`. Attached to
+`report` on `/api/clean` when `total > 0` (and `changed` becomes true).
+
+This rewrites **wording**. It is not a statistical-watermark removal and cannot
+make text pass a vendor detector; see the README's "Batasan" section.
+
+## App-side verification (`verify`)
+
+Re-scans the final text with the same predicate as `deep_scrub` and reports what
+survived. Shape:
+
+```json
+{ "clean": true, "residual": 0, "samples": [] }
+```
+
+`samples` is `[{"codepoint":"U+200B","count":3}, ...]`, sorted by count desc,
+capped at 10. Attached to `report` on `/api/clean` for text output when
+`verify` is true. `clean` is `true` iff `residual == 0`.
+
+**Pipeline order** (text output only):
+upstream clean → `deep_scrub` → `deai_style` → `strip_ai_tells` → `verify`.
 
 ### `POST /api/clean`
 Body = text input or file input. Steps:

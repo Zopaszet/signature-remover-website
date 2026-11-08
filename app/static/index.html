@@ -110,6 +110,21 @@
           <fieldset class="options">
             <legend class="visually-hidden">Opsi pembersihan</legend>
 
+            <div class="option option-select">
+              <label class="option-body" for="opt-deai_style">
+                <span class="option-title">Netralkan frasa AI</span>
+                <span class="option-hint" id="hint-deai_style">
+                  Menulis ulang kata, bukan sekadar karakter. Konservatif hanya mengganti frasa klise AI (mis. &#8220;in order to&#8221; menjadi &#8220;to&#8221;) tanpa mengubah susunan kalimat. Menengah juga membuang kata penegas seperti &#8220;very&#8221; atau &#8220;really&#8221;.
+                </span>
+              </label>
+              <select class="select" id="opt-deai_style" name="deai_style"
+                      aria-describedby="hint-deai_style">
+                <option value="0">Mati</option>
+                <option value="1" selected>Konservatif</option>
+                <option value="2">Menengah</option>
+              </select>
+            </div>
+
             <label class="option">
               <input type="checkbox" id="opt-strip_ai_tells" checked aria-describedby="hint-strip_ai_tells">
               <span class="option-body">
@@ -157,6 +172,27 @@
                 <span class="option-hint" id="hint-aggressive_homoglyphs">Ganti huruf mirip dari aksara lain menjadi huruf Latin. Lebih agresif.</span>
               </span>
             </label>
+
+            <p class="options-group-title" id="options-group-label">Lapisan lanjutan</p>
+            <div class="options-group" role="group" aria-labelledby="options-group-label">
+              <label class="option">
+                <input type="checkbox" id="opt-deep_scrub" checked
+                       aria-describedby="hint-deep_scrub">
+                <span class="option-body">
+                  <span class="option-title">Deep scrub</span>
+                  <span class="option-hint" id="hint-deep_scrub">Sapuan kedua atas karakter tak terlihat yang sengaja disisakan lapisan pertama (bidi, tag, private use, noncharacter) agar hasil bisa dibuktikan bersih.</span>
+                </span>
+              </label>
+
+              <label class="option">
+                <input type="checkbox" id="opt-verify" checked
+                       aria-describedby="hint-verify">
+                <span class="option-body">
+                  <span class="option-title">Verifikasi residu</span>
+                  <span class="option-hint" id="hint-verify">Pindai ulang hasil dan laporkan bila masih ada karakter tak terlihat yang lolos.</span>
+                </span>
+              </label>
+            </div>
           </fieldset>
         </aside>
       </div>
@@ -169,7 +205,7 @@
         <button class="btn btn-ghost" id="inspectBtn" type="button">Periksa penanda</button>
         <button class="btn btn-ghost" id="resetBtn" type="button">Reset</button>
         <p class="action-note">
-          Hanya menghapus penanda tak terlihat/Unicode. Watermark statistik (Layer B) tidak termasuk.
+          Hapus penanda tak terlihat/Unicode, lapisan kedua untuk sisa karakternya, dan opsi penulisan ulang frasa klise AI. Watermark statistik (Layer B) tidak termasuk.
         </p>
       </div>
     </section>
@@ -231,8 +267,11 @@
         </div>
 
         <p class="result-summary" id="textSummary"></p>
+        <p class="result-note" id="textDeaiNote" hidden></p>
 
         <div class="stats" id="textStats"></div>
+
+        <div class="verify-badge" id="textVerify" role="status" aria-live="polite" hidden></div>
 
         <div class="output-block">
           <div class="output-head">
@@ -313,7 +352,7 @@
   </main>
 
   <footer class="site-footer reveal" style="--d:200ms">
-    <p>Berjalan lokal di perangkat Anda · hanya lapisan Layer A · versi antarmuka 1.0</p>
+    <p>Berjalan lokal di perangkat Anda · lapisan Layer A dan sapuan karakter kedua · opsi frasa AI bersifat pilihan · versi antarmuka 1.0</p>
   </footer>
 </body>
 </html>

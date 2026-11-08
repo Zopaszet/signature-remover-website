@@ -570,6 +570,61 @@ h1 {
 .option-title { font-size: 0.88rem; font-weight: 600; line-height: 1.35; }
 .option-hint { font-size: 0.76rem; color: var(--text-muted); line-height: 1.4; }
 
+/* ---- advanced options group ---- */
+.options-group-title {
+  margin: 10px 0 2px;
+  padding: 9px 10px 0;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ---- deai_style selector ---- */
+.option-select { cursor: default; }
+.option-select:hover { background: transparent; }
+.option-select .option-body { cursor: pointer; }
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  align-self: flex-start;
+  margin: 2px 0 0 auto;
+  padding: 7px 30px 7px 11px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  background-color: var(--surface);
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+  background-position: calc(100% - 15px) calc(50% + 1px), calc(100% - 10px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+.select:hover { border-color: var(--accent); }
+.select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
 /* =========================================================
    Action row
    ========================================================= */
@@ -734,6 +789,83 @@ h1 {
   background: var(--surface-2);
   border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   font-size: 0.92rem;
+}
+
+.result-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: -8px 0 16px;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+.result-note::before {
+  content: "";
+  flex: none;
+  width: 6px; height: 6px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateY(-2px);
+}
+.result-note strong {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- verification badge ---- */
+.verify-badge {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -6px 0 18px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+.verify-badge::before {
+  content: "";
+  flex: none;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.verify-badge.is-pass {
+  color: var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
+  background: var(--ok-soft);
+}
+.verify-badge.is-pass::before { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.verify-badge.is-warn {
+  color: var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 40%, transparent);
+  background: var(--warn-soft);
+}
+.verify-badge.is-warn::before { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+.verify-samples {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-weight: 500;
+}
+.verify-sample {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid color-mix(in oklab, var(--warn) 40%, transparent);
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- badge ---- */
